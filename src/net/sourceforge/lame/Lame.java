@@ -149,9 +149,8 @@ public class Lame {
      * @return -1 if error occurred, 0 on success
      */
     public static int configureDecoder(InputStream input) throws IOException {
-        int size = 100;
         int id3Length, aidLength;
-        byte[] buf = new byte[size];
+        byte[] buf = new byte[128];
 
         if (input.read(buf, 0, 4) != 4) {
             return -1;
@@ -166,8 +165,9 @@ public class Lame {
             buf[4] &= 0x7F;
             buf[5] &= 0x7F;
             id3Length = (((((buf[2] << 7) + buf[3]) << 7) + buf[4]) << 7) + buf[5];
-            input.skip(id3Length);
-            if (input.read(buf, 0, 4) != 4) {
+            input.skip(id3Length); // we have now arrived at the end of the ID3 header
+            if (input.available() <= 0) { // ensure that more data is available
+//            if (input.read(buf, 0, 4) != 4) {
                 return -1;
             }
         }
@@ -182,24 +182,25 @@ public class Lame {
                 return -1;
             }
         }
-        while (!isMp123SyncWord(buf)) {
-         // search for MP3 syncword one byte at a time
-            for (int i = 0; i < 3; i++) {
-                buf[i] = buf[i + 1];
-            }
-            int val = input.read();
-            if (val == -1) {
-                return -1;
-            }
-            buf[3] = (byte) val;
-        }
+//        while (!isMp123SyncWord(buf)) {
+//         // search for MP3 syncword one byte at a time
+//            for (int i = 0; i < 3; i++) {
+//                buf[i] = buf[i + 1];
+//            }
+//            int val = input.read();
+//            if (val == -1) {
+//                return -1;
+//            }
+//            buf[3] = (byte) val;
+//        }
 
-        do {
-            size = input.read(buf);
-            if (nativeConfigureDecoder(buf, size) == 0) {
-                return 0;
-            }
-        } while(size > 0);
+        int len = 0;
+        while ((len = input.read(buf)) > 0) {
+          // returns 0 if the header has been decoded. -1 otherwise.
+          if (nativeConfigureDecoder(buf, len) == 0) {
+              return 0;
+          }
+        }
         return -1;
     }
 
@@ -263,30 +264,20 @@ public class Lame {
      *
      * @return -1 if error occurred, number of bytes decoded otherwise
      */
-    public static int decodeFrame(InputStream input,
-            short[] pcmLeft, short[] pcmRight) throws IOException {
+    public static int decodeFrame(InputStream input, short[] pcmLeft, short[] pcmRight) throws IOException {
         int len = 0;
-        int samplesRead = 0;
         byte[] buf = new byte[MP3_BUFFER_SIZE];
 
-        // check for buffered data
-        samplesRead = nativeDecodeFrame(buf, len, pcmLeft, pcmRight);
-        if (samplesRead != 0) {
+        do {
+          // NOTE(mhroth): decode the frame before reading new samples in order to check for
+          // previously buffered PCM samples.
+          int samplesRead = nativeDecodeFrame(buf, len, pcmLeft, pcmRight);
+          if (samplesRead == -1 || samplesRead > 0) {
             return samplesRead;
-        }
-        while (true) {
-            len = input.read(buf);
-            if (len == -1) {
-                // finished reading input buffer, check for buffered data
-                samplesRead = nativeDecodeFrame(buf, len, pcmLeft, pcmRight);
-                break;
-            }
-            samplesRead = nativeDecodeFrame(buf, len, pcmLeft, pcmRight);
-            if (samplesRead > 0) {
-                break;
-            }
-        }
-        return samplesRead;
+          }
+        } while((len = input.read(buf)) > 0);
+
+        return -1;
     }
 
     private static native int nativeDecodeFrame(byte[] inputBuffer, int bufferSize,

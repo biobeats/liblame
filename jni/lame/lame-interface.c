@@ -170,7 +170,7 @@ JNIEXPORT jint JNICALL Java_net_sourceforge_lame_Lame_nativeConfigureDecoder
       __android_log_print(ANDROID_LOG_DEBUG, "liblame.so", "sample rate: %d, channels: %d", mp3data->samplerate, mp3data->stereo);
       __android_log_print(ANDROID_LOG_DEBUG, "liblame.so", "bitrate: %d, frame size: %d", mp3data->bitrate, mp3data->framesize);
     } else {
-        ret = -1;
+      ret = -1;
     }
     (*env)->ReleaseByteArrayElements(env, mp3Buffer, mp3_buf, 0);
   }
@@ -240,19 +240,15 @@ JNIEXPORT jint JNICALL Java_net_sourceforge_lame_Lame_nativeDecodeFrame
   right_buf = (*env)->GetShortArrayElements(env, rightChannel, NULL);
   mp3_buf = (*env)->GetByteArrayElements(env, mp3Buffer, NULL);
 
-  samples_read = hip_decode1_headers(hip_context, mp3_buf, bufferSize, left_buf, right_buf, mp3data);
+//  samples_read = hip_decode1_headers(hip_context, mp3_buf, bufferSize, left_buf, right_buf, mp3data);
+  samples_read = hip_decode1(hip_context, mp3_buf, bufferSize, left_buf, right_buf);
 
   (*env)->ReleaseByteArrayElements(env, mp3Buffer, mp3_buf, 0);
 
-  if (samples_read < 0) {
-    // some sort of error occurred, don't propagate changes to buffers
-	(*env)->ReleaseShortArrayElements(env, leftChannel, left_buf, JNI_ABORT);
-	(*env)->ReleaseShortArrayElements(env, rightChannel, right_buf, JNI_ABORT);
-    return samples_read;
-  }
-
-  (*env)->ReleaseShortArrayElements(env, leftChannel, left_buf, 0);
-  (*env)->ReleaseShortArrayElements(env, rightChannel, right_buf, 0);
+  // if an error occurred, don't propagate changes to buffers
+  const jint mode = (samples_read > 0) ? 0 : JNI_ABORT;
+  (*env)->ReleaseShortArrayElements(env, leftChannel, left_buf, mode);
+  (*env)->ReleaseShortArrayElements(env, rightChannel, right_buf, mode);
 
   return samples_read;
 }
@@ -268,7 +264,7 @@ JNIEXPORT jint JNICALL Java_net_sourceforge_lame_Lame_closeDecoder
     mp3data = NULL;
     enc_delay = -1;
     enc_padding = -1;
-	return ret;
+    return ret;
   }
   return -1;
 }
